@@ -1,0 +1,46 @@
+-- BASIC ANALYTICS 
+ -- Find the top 5 most popular categories by quantity of purchases.
+SELECT
+	SUM(ed.quantity) AS qua,
+	ed.category
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	category
+ORDER BY
+	qua DESC
+LIMIT 5
+
+-- For each product category, calculate: average, minimum and maximum price.
+
+SELECT
+	ed.category,
+	AVG(ed.unit_price) AS avg_check,
+	MIN(ed.unit_price) AS min_price,
+	MAX(ed.unit_price) AS max_price
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	category
+ 
+-- Find the top 10 users with the highest spending.
+SELECT
+	SUM(ed.unit_price * ed.quantity ) AS spend,
+	ed.customer_id
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id
+ORDER BY
+	spend DESC
+LIMIT 10
+ 
+-- Calculate the average order value for a category.
+SELECT
+	COUNT(ed.order_id) as count_orders,
+	SUM(ed.unit_price * ed.quantity )/COUNT(ed.order_id) AS aov,
+	ed.category 
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	ed.category 
