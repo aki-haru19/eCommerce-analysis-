@@ -1,0 +1,76 @@
+--GMV for last year(AMALYZING SEP 2024-AVG 2025)
+SELECT
+	*
+FROM
+	(
+	SELECT
+		SUM(unit_price * quantity) AS gvm,
+		DATE_TRUNC('month', TO_DATE(order_date, 'yyyy-mm-dd')) AS month1
+	FROM
+		ecommerce_dataset ed
+	GROUP BY
+		month1
+	)
+WHERE
+	month1 BETWEEN '2024-09-01' AND '2025-08-31'
+ORDER BY month1
+
+--AOV by customer segment(new and returning customers)
+WITH segment AS(   
+SELECT
+	customer_id,
+	CASE 
+		WHEN COUNT( DISTINCT order_id) = 1 THEN 'new'
+		ELSE 'returning'
+	END AS customer_segment
+FROM
+	ecommerce_dataset ed 
+	GROUP BY customer_id )
+SELECT 
+	customer_segment,
+	COUNT(DISTINCT order_id) AS total_orders,
+	SUM(ed.quantity * ed.unit_price) AS total_revenue,
+	SUM(ed.quantity * ed.unit_price)/COUNT(DISTINCT order_id) AS aov
+FROM 
+	segment 
+	INNER JOIN ecommerce_dataset ed  ON ed.customer_id = segment.customer_id 
+	GROUP BY customer_segment
+
+--Revenue per customer  
+	SELECT
+	customer_id,
+	COUNT(DISTINCT ed.order_id ) AS orders,
+	SUM(unit_price * quantity) AS revenue_per_customer
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id
+ORDER BY
+	revenue_per_customer DESC
+	
+--Extra.rewenue per customer compare 
+WITH top20 AS (
+  SELECT
+    customer_id,
+    SUM(unit_price * quantity) AS revenue_per_customer
+  FROM ecommerce_dataset
+  GROUP BY customer_id
+  ORDER BY revenue_per_customer DESC
+  LIMIT 20
+),
+avg_per_customer AS (
+  SELECT
+    AVG(revenue_per_customer) AS avg_revenue
+  FROM (
+    SELECT
+      customer_id,
+      SUM(unit_price * quantity) AS revenue_per_customer
+    FROM ecommerce_dataset
+    GROUP BY customer_id
+  )
+)
+select t.customer_id,
+  ROUND(100 * SUM(t.revenue_per_customer) / (SELECT avg_revenue FROM avg_per_customer), 2) AS top20_vs_avg_percent
+FROM top20 t
+group by customer_id 
+	
