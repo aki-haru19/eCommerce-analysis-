@@ -1,0 +1,161 @@
+--Repeat purchase rate(customers who made nore than 1 order)
+  
+WITH orders AS (
+SELECT
+	COUNT(DISTINCT order_id) AS count_orders, --count total orders 
+	ed.customer_id
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	ed.customer_id )
+SELECT
+	ROUND(100*COUNT( CASE WHEN count_orders >1 THEN o.customer_id END )/
+	COUNT(*), 2)  as comeback --percent of users who mede more than 1 order
+	--ROUND(100*COUNT( CASE WHEN count_orders =1 THEN o.customer_id END )/ COUNT(*), 2)  --percent of users who mede only one order
+FROM
+	orders o
+
+--Life time value (LTV)
+
+WITH days AS (
+SELECT
+	ed.customer_id,
+	MAX(TO_DATE(order_date, 'yyyy-mm-dd'))-MIN(TO_DATE(order_date, 'yyyy-mm-dd' )) AS live_days,     -- days between orders
+	COUNT(DISTINCT order_id) AS orders,
+	SUM(ed.unit_price * ed.quantity ) AS revenue
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id )
+SELECT              	-- find avg of ltv
+	AVG(revenue),
+	MAX(revenue),
+	PERCENTILE_CONT(0.5) WITHIN GROUP(ORDER BY revenue ASC) AS median
+FROM
+	days
+
+--Declining customers rate (cooling off rate)
+--(Percent of customers whose 2nd order revenue < 1st order revenue)
+
+WITH orders_ranked AS (    --ranking orders by customers
+SELECT
+        customer_id,
+        order_date,
+        SUM(quantity * unit_price) AS revenue,
+        ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY order_date) AS rn
+FROM ecommerce_dataset
+GROUP BY customer_id, order_date
+),
+first_order AS (   --find first order
+    SELECT customer_id, revenue AS first_revenue
+    FROM orders_ranked
+    WHERE rn = 1       
+),
+second_order AS (  --second order made
+    SELECT customer_id, revenue AS second_revenue
+    FROM orders_ranked
+    WHERE rn = 2    
+),
+comparison AS (   --compare first and second orders
+    SELECT
+        f.customer_id,
+        CASE
+            WHEN s.second_revenue < f.first_revenue THEN 'cooled off'
+            ELSE 'warmed up '
+        END AS status
+    FROM first_order f
+    JOIN second_order s ON s.customer_id = f.customer_id   
+)
+SELECT     --percent of cooled off users
+    ROUND(
+        100.0 * SUM(CASE WHEN status = 'cooled off' THEN 1 ELSE 0 END) / COUNT(*),
+        2
+    ) AS cold_customers_pct
+FROM comparison;   
+
+--Typical churn. 2025-8-24 is a last day in dataset, so i use 2025-08-25 as a current date 
+
+WITH days AS (     --extract numders of days from current day to last order
+SELECT
+	customer_id,
+	(TO_DATE('2025-08-25', 'yyyy-mm-dd' ))- (MAX(TO_DATE(ed.order_date, 'yyyy-mm-dd' ))) AS days_from_last_or
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id )
+SELECT
+	COUNT(CASE WHEN days_from_last_or > 90 THEN 1 END) AS churned,   --count users who didn't order for more than 90 deys
+	COUNT(customer_id) AS total_custumer,
+	ROUND((100 *(COUNT(CASE WHEN days_from_last_or > 90 THEN customer_id END))/ COUNT(customer_id)), 2)  --percent of churned
+FROM
+	days
+
+--MoM active user retention
+
+WITH orders AS (
+SELECT
+	customer_id,
+	date_trunc('month', to_date(order_date, 'yyyy-mm-dd')) AS month,
+	--month active
+	sum(ed.unit_price * ed.quantity ) AS revenue
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id,
+	month
+),
+pairs AS (    --count active users in m0  comeback in m+1
+SELECT
+	curr."month" AS current_month,
+	COUNT(DISTINCT curr.customer_id ) AS total_cus,
+	COUNT(DISTINCT next.customer_id ) AS total_next
+FROM
+	orders curr
+LEFT JOIN orders next ON
+	curr.customer_id = next.customer_id
+	AND next."month" = curr."month" + interval '1 month'
+GROUP BY
+	curr."month" 
+)
+SELECT
+	current_month ,
+	total_cus,
+	total_next,
+	ROUND(total_next::DECIMAL / total_cus * 100, 2)
+FROM
+	pairs
+
+--Retention rate (return overall cohort_based)
+
+WITH first AS (
+SELECT
+	customer_id,
+	DATE_TRUNC('month', MIN(TO_DATE(ed.order_date , 'yyyy-mm-dd'))) AS first_buy
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	customer_id
+),
+second AS(
+SELECT customer_id,
+DATE_TRUNC('month', TO_DATE(ed.order_date , 'yyyy-mm-dd')) AS all_buy
+FROM ecommerce_dataset ed 
+GROUP BY customer_id, all_buy
+),
+month_diff AS(        --difference between first buy and next buys
+SELECT s.customer_id, f.first_buy, s.all_buy,
+((EXTRACT(year FROM s.all_buy) - EXTRACT(year FROM f.first_buy))* 12
++(EXTRACT(month FROM s.all_buy) - EXTRACT(month FROM f.first_buy))) AS month_diff
+FROM second s
+JOIN first f ON f.customer_id = s.customer_id 
+)
+SELECT                 -- count if cusers comeback 
+	first_buy,
+	COUNT(DISTINCT CASE WHEN month_diff = 0 THEN customer_id END) AS new_users,
+	COUNT(DISTINCT CASE WHEN month_diff <> 0 THEN customer_id END) AS retained_next,
+	ROUND(COUNT(DISTINCT CASE WHEN month_diff <> 0 THEN customer_id END)::DECIMAL /
+COUNT(DISTINCT CASE WHEN month_diff = 0 THEN customer_id END)* 100, 2) AS retention_rate
+FROM
+	month_diff
+GROUP BY
+	first_buy
