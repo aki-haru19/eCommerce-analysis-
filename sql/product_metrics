@@ -1,0 +1,58 @@
+
+--Find top 20 products on revenue, quantity, price
+	
+SELECT
+	category,
+	ed.product_name,
+	SUM(ed.quantity) AS units_sold,
+	AVG(ed.unit_price) AS price,
+	ROUND(SUM(ed.quantity * ed.unit_price ), 2) AS revenue,   --gmv count
+	COUNT(ed.order_id) AS orders_with_products
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	ed.category,
+	ed.product_name
+ORDER BY
+	revenue DESC
+LIMIT 20      --top 20
+	
+--Percentege of each category in revenue
+
+SELECT
+	ed.category,
+	SUM(ed.quantity * ed.unit_price ) AS category_revenue,    
+	ROUND(100.0 * SUM(ed.quantity * ed.unit_price )/(select     --calculation percentage of each category
+SUM(ed.quantity * ed.unit_price) FROM ecommerce_dataset ed), 2) AS share_revenue
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	ed.category
+ORDER BY
+	share_revenue DESC
+	
+--Product affinity, witch products buys together.
+-- Product affinity by customer (not order-based, 
+-- since each order_id contains only one product in dataset)
+WITH all1 AS (           --find first product
+SELECT
+	ed.customer_id,
+	ed.product_name
+FROM
+	ecommerce_dataset ed
+)
+SELECT
+	all1.product_name AS prod1,
+	ed.product_name AS prod2,
+	COUNT(distinct all1.customer_id) AS timers_together       --calculate times buys together
+FROM
+	all1
+JOIN ecommerce_dataset ed
+ON
+	all1.customer_id = ed.customer_id 
+	AND all1.product_name < ed.product_name         
+GROUP BY
+	all1.product_name,
+	ed.product_name
+ORDER BY
+	timers_together DESC
