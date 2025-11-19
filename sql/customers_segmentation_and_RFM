@@ -1,0 +1,150 @@
+--users segmentation on gender, age group, country
+
+SELECT
+	ed.gender ,
+	ed.age_group ,
+	country,
+	ROUND(AVG(ed.unit_price * ed.quantity), 2) AS revenue,
+	COUNT(DISTINCT ed.order_id)
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	gender,
+	age_group,
+	country
+ORDER BY
+	revenue DESC
+
+-- witch products in category 'canceled'
+
+SELECT
+	ed.product_name ,
+	COUNT(order_id),
+	SUM(CASE WHEN order_status = 'Cancelled' THEN 1 ELSE 0 END) AS cancelled_orders,
+	ROUND(100 * SUM(CASE WHEN ed.order_status = 'Cancelled' THEN 1 ELSE 0 END)/ COUNT(order_id) , 5) AS pct_of_cancelled
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	ed.product_name
+
+-- Customer retention after different types of review
+
+WITH reviews AS (
+  SELECT 
+    customer_id,
+    review_text,
+    MIN(order_date) AS first_review_date
+  FROM ecommerce_dataset
+  WHERE review_text IN ('very bad', 'bad', 'average', 'good', 'very good')
+  GROUP BY customer_id, review_text
+),
+repurchase AS (
+  SELECT 
+    r.customer_id,
+    r.review_text,
+    CASE WHEN COUNT(*) FILTER (WHERE e.order_date > r.first_review_date) > 0 THEN 1 ELSE 0 END AS repurchased
+  FROM reviews r
+  LEFT JOIN ecommerce_dataset e 
+    ON r.customer_id = e.customer_id
+  GROUP BY r.customer_id, r.review_text
+)
+SELECT 
+  review_text,
+  COUNT(DISTINCT customer_id) AS total_customers,
+  SUM(repurchased) AS repurchased_customers,
+  COUNT(DISTINCT customer_id) - SUM(repurchased) AS not_repurchased,
+  ROUND(100.0 * SUM(repurchased) / COUNT(DISTINCT customer_id), 2) AS repurchase_rate_pct
+FROM repurchase 
+GROUP BY review_text
+ORDER BY repurchase_rate_pct DESC
+
+---rfm 
+  
+WITH metrics AS (   --calculating rfm
+SELECT
+	customer_id ,
+	(TO_DATE('2025-08-25', 'yyyy-mm-dd'))- (MAX(TO_DATE(order_date, 'yyyy-mm-dd' ))) AS recency,
+	COUNT(DISTINCT ORDER_ID) AS frequency,
+	SUM(unit_price * quantity ) AS monetary
+FROM
+	ecommerce_dataset
+GROUP BY
+	customer_id),
+score AS (        --deviding rfm on quartiles
+SELECT
+	customer_id ,
+	recency,
+	frequency ,
+	monetary,
+	NTILE(4) OVER (
+	ORDER BY recency DESC) AS r,
+	NTILE(4) OVER (
+	ORDER BY frequency ASC) AS f,
+	NTILE(4) OVER (
+	ORDER BY monetary ASC) AS m
+FROM
+	metrics),
+segments AS (   --sets segments
+SELECT
+	customer_id,
+	recency,
+	frequency,
+	monetary, r, f, m,
+	CASE
+		WHEN r = 4 AND f = 4 AND m = 4 THEN 'vip'
+		WHEN r = 4 AND f >= 3 THEN 'loyal'
+		WHEN r = 4 AND m >= 3 THEN 'POTENTIAL'
+		WHEN r >= 3 AND f >= 3 THEN 'RISKY'
+		WHEN r <= 2 THEN 'LOST'
+		ELSE 'LOST FOREVER'
+	END AS segments
+FROM
+	score)
+SELECT
+	segments,
+	COUNT(DISTINCT customer_id) AS customers,
+	ROUND(100 * COUNT(DISTINCT customer_id) / SUM(COUNT(DISTINCT customer_id)) OVER(), 2) AS percent_of_customers,
+	ROUND(100 * SUM(monetary)/ SUM(SUM(monetary)) OVER (), 2) AS percent_revenue
+FROM
+	segments
+GROUP BY
+	segments
+ORDER BY
+	percent_revenue
+
+
+-- product category affinity by demographic
+
+SELECT
+	product_name, 
+	gender,
+	COUNT(DISTINCT order_id) AS count_orders,
+	ROUND(100.0 * COUNT(DISTINCT order_id) / 
+    SUM(COUNT(DISTINCT order_id)) OVER (PARTITION BY gender), 2) AS category_preference_pct
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	gender,
+	product_name
+ORDER BY
+	gender,
+	count_orders DESC
+
+-- sesonal patterns by age segments 
+
+SELECT
+	ed.age_group,
+	TO_CHAR(TO_DATE(order_date, 'yyyy-mm-dd'), 'month yyyy') AS year_month,
+	EXTRACT( YEAR FROM TO_DATE(order_date, 'yyyy-mm-dd')) AS year,
+	EXTRACT( MONTH FROM TO_DATE(order_date, 'yyyy-mm-dd')) AS month,
+	SUM(unit_price * quantity) AS revenue,
+	COUNT(DISTINCT customer_id) AS customers
+FROM
+	ecommerce_dataset ed
+GROUP BY
+	year,
+	month,
+	year_month,
+	age_group
+ORDER BY
+	age_group
