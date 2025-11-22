@@ -15,7 +15,7 @@ Analysis performed in **PostgreSQL (SQL)** and visualization created in **Tablea
 **3. Customer Metrics** — LTV, retention, churn, repeat rate, cooling off rate
 **4. Product Metrics** — category share, top products, product affinity
 5. **Customer segmentation and RFM analysis**— customer value analysis, behavior patterns by gender, age, and geography
-### **Links: portfolio, Tableau
+### Links: portfolio, Tableau
 
 # Key Findings
 
