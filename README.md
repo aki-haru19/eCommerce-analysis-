@@ -6,7 +6,7 @@ A personal challenge — to learn how to work with commercial-style datasets, ex
 Analyze revenue trends and overall business performance.
 Study customer behavior and retention, build segmentation, and explore product and category performance.
 ### **Dataset & Tools**
-Used the Kaggle **[eCommerce dataset](https://www.kaggle.com/datasets/nabihazahid/ecommerce-dataset-for-sql-analysis?select=ecommerce_dataset_10000.csv)** ( 20 columns, 10,000 rows, data range: 2022-08-25-  2025-08-24)
+Used the Kaggle **[eCommerce dataset](https://www.kaggle.com/datasets/nabihazahid/ecommerce-dataset-for-sql-analysis?select=ecommerce_dataset_10000.csv)** ( 20 columns, 10,000 rows, data range: 2022-08-25 -  2025-08-24)
 Analysis performed in **PostgreSQL (SQL)** and visualization created in **Tableau Public**.
 ### **Approach**
 6-stage comprehensive analytical workflow:
